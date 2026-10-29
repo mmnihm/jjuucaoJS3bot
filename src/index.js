@@ -173,7 +173,7 @@ async function handleAdminCommand(msg, command, text) {
       return true;
     }
     const existing = state.buttons.findIndex(item => item.name === name);
-    if (existing >= 0) state.buttons[existing] = { ...state.buttons[existing], name, reply, url };
+    if (existing >= 0) state.buttons[existing] = { ...state.buttons[existing], name, reply, url: url || state.buttons[existing].url || '' };
     else if (state.buttons.length >= 16) {
       await sendMessage(chatId, '自定义按钮最多 16 个，请先删除不需要的按钮。');
       return true;
