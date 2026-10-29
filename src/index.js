@@ -6,8 +6,39 @@ const path = require('node:path');
 const TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = String(process.env.ADMIN_ID || '').trim();
 const BOT_NAME = process.env.BOT_NAME || '会员通知助手';
-const DATA_DIR = process.env.DATA_DIR || '/tmp/jjuucaoJS3bot-data';
-const STATE_FILE = path.join(DATA_DIR, 'state.json');
+const configuredDataDir = String(process.env.DATA_DIR || '').trim().replace(/^["']+|["']+$/g, '').trim();
+let DATA_DIR = configuredDataDir || '/tmp/jjuucaoJS3bot-data';
+let STATE_FILE = '';
+
+function initializeDataDir() {
+  const candidates = [...new Set([
+    DATA_DIR,
+    '/data',
+    '/tmp/jjuucaoJS3bot-data'
+  ].filter(Boolean))];
+  let lastError;
+  for (const candidate of candidates) {
+    try {
+      fs.mkdirSync(candidate, { recursive: true });
+      const probe = path.join(candidate, '.write-test-' + process.pid);
+      fs.writeFileSync(probe, 'ok');
+      fs.unlinkSync(probe);
+      DATA_DIR = candidate;
+      STATE_FILE = path.join(DATA_DIR, 'state.json');
+      if (configuredDataDir && DATA_DIR !== configuredDataDir) {
+        console.warn('配置的数据目录不可写，已自动切换到：' + DATA_DIR);
+      } else {
+        console.log('数据目录：' + DATA_DIR);
+      }
+      return;
+    } catch (err) {
+      lastError = err;
+      console.warn('数据目录不可用：' + candidate + '；' + err.message);
+    }
+  }
+  throw new Error('没有可写的数据目录。请在平台设置 DATA_DIR=/data 或使用可写临时目录。' +
+    (lastError ? ' 最后错误：' + lastError.message : ''));
+}
 const POLL_TIMEOUT = Math.max(5, Math.min(50, Number(process.env.POLL_TIMEOUT || 25)));
 
 if (!TOKEN) {
@@ -35,7 +66,7 @@ let state = {
 };
 
 function loadState() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  initializeDataDir();
   try {
     if (fs.existsSync(STATE_FILE)) {
       const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
