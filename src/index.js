@@ -107,7 +107,8 @@ function keyboard(userId) {
   const custom = state.buttons.map(item => item.name).filter(name => !['⚙️ 设置', '/admin'].includes(name));
   for (let i = 0; i < custom.length; i += 2) rows.push(custom.slice(i, i + 2));
   if (isAdmin(userId)) rows.push(['⚙️ 设置']);
-  return { keyboard: rows.length ? rows : [['⚙️ 设置'].filter(() => isAdmin(userId))], resize_keyboard: true, is_persistent: true };
+  if (!rows.length) return { remove_keyboard: true };
+  return { keyboard: rows, resize_keyboard: true, is_persistent: true };
 }
 
 async function home(chatId, userId, text) {
