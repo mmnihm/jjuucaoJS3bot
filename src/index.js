@@ -287,11 +287,15 @@ async function handleMessage(msg) {
     console.log('首位 /start 用户成为管理员：' + state.adminId);
   }
 
+  const now = Date.now();
+  const previousUser = state.users[uid];
   state.users[uid] = {
     id: msg.from.id,
     first_name: msg.from.first_name || '',
     username: msg.from.username || '',
-    last_seen: Date.now()
+    first_seen: previousUser?.first_seen || now,
+    start_counted: previousUser?.start_counted || (command === '/start' ? now : null),
+    last_seen: now
   };
   saveState();
 
@@ -430,6 +434,8 @@ async function handleMessage(msg) {
           [{ text: '设置底部每行按钮数', callback_data: 'settings:layout' }],
           [{ text: '设置新用户欢迎消息', callback_data: 'settings:welcome' }],
           [{ text: '添加/修改按钮', callback_data: 'settings:addbutton' }],
+          [{ text: '📊 用户统计', callback_data: 'settings:stats' }],
+          [{ text: '📊 用户统计', callback_data: 'settings:stats' }],
           [{ text: '开始广播', callback_data: 'settings:broadcast' }],
           [{ text: '管理帮助', callback_data: 'settings:help' }]
         ]
@@ -583,6 +589,28 @@ async function handleCallback(query) {
           [{ text: '管理帮助', callback_data: 'settings:help' }]
         ]
       }
+    });
+    return;
+  }
+
+  if (query.data === 'settings:stats') {
+    const users = Object.values(state.users || {});
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const weekStart = todayStart - 6 * 24 * 60 * 60 * 1000;
+    const started = users.filter(user => Number(user.start_counted) > 0);
+    const today = started.filter(user => Number(user.start_counted) >= todayStart).length;
+    const week = started.filter(user => Number(user.start_counted) >= weekStart).length;
+    const tracked = users.filter(user => Number(user.first_seen) > 0).length;
+    const unknownHistory = users.length - started.length;
+    const message = '📊 用户统计\\n\\n' +
+      '启动过机器人的用户：' + started.length + ' 人\\n' +
+      '已记录用户总数：' + users.length + ' 人\\n' +
+      '今日首次启动：' + today + ' 人\\n' +
+      '最近 7 天首次启动：' + week + ' 人' +
+      (unknownHistory ? '\\n\\n旧用户的历史启动时间未记录：' + unknownHistory + ' 人（不计入今日和近 7 天）' : '');
+    await sendMessage(chatId, message, {
+      reply_markup: { inline_keyboard: [[{ text: '🔄 刷新统计', callback_data: 'settings:stats' }], [{ text: '⬅️ 返回设置', callback_data: 'settings:menu' }]] }
     });
     return;
   }
