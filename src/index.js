@@ -6,7 +6,7 @@ const path = require('node:path');
 const TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = String(process.env.ADMIN_ID || '').trim();
 const BOT_NAME = process.env.BOT_NAME || '会员通知助手';
-const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+const DATA_DIR = process.env.DATA_DIR || '/tmp/jjuucaoJS3bot-data';
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const POLL_TIMEOUT = Math.max(5, Math.min(50, Number(process.env.POLL_TIMEOUT || 25)));
 
