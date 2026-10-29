@@ -25,7 +25,8 @@ let state = {
   ],
   supportMode: {},
   supportMap: {},
-  pendingBroadcast: {}
+  pendingBroadcast: {},
+  pendingButtonEdit: {}
 };
 
 function loadState() {
@@ -46,6 +47,7 @@ function loadState() {
   state.supportMode ||= {};
   state.supportMap ||= {};
   state.pendingBroadcast ||= {};
+  state.pendingButtonEdit ||= {};
 }
 
 function saveState() {
@@ -121,7 +123,7 @@ async function adminHelp(chatId) {
     '管理员功能：',
     '也可以点击底部「⚙️ 设置」打开管理菜单。',
     '/buttons — 查看自定义按钮',
-    '/addbutton 按钮名称|自动回复内容 — 新增或修改按钮',
+    '/addbutton 按钮名称|自动回复内容|链接 — 新增或修改按钮',
     '/delbutton 按钮名称 — 删除按钮',
     '/broadcast — 编写广播并二次确认',
     '/cancel — 取消当前操作',
@@ -154,23 +156,28 @@ async function handleAdminCommand(msg, command, text) {
 
   if (command === '/addbutton') {
     const value = text.replace(/^\/addbutton(?:@\S+)?\s*/i, '');
-    const split = value.indexOf('|');
-    if (split < 1 || !value.slice(0, split).trim() || !value.slice(split + 1).trim()) {
-      await sendMessage(chatId, '格式：/addbutton 按钮名称|自动回复内容\n例如：/addbutton 会员价格|请联系客服了解套餐。');
+    const parts = value.split('|');
+    const name = (parts.shift() || '').trim().slice(0, 40);
+    const reply = (parts.shift() || '').trim().slice(0, 3500);
+    const url = (parts.join('|') || '').trim();
+    if (!name || (!reply && !url)) {
+      await sendMessage(chatId, '格式：/addbutton 按钮名称|自动回复内容|链接\n例如：/addbutton 会员频道|点击下方进入频道|https://t.me/yourchannel');
       return true;
     }
-    const name = value.slice(0, split).trim().slice(0, 40);
-    const reply = value.slice(split + 1).trim().slice(0, 3500);
-    if (['会员套餐', '最新通知', '联系客服', '/admin'].includes(name)) {
+    if (url && !/^https?:\/\//i.test(url)) {
+      await sendMessage(chatId, '链接必须以 https:// 或 http:// 开头。');
+      return true;
+    }
+    if (['会员套餐', '最新通知', '联系客服', '⚙️ 设置', '/admin'].includes(name)) {
       await sendMessage(chatId, '这个名称是固定菜单，请换一个按钮名称。');
       return true;
     }
     const existing = state.buttons.findIndex(item => item.name === name);
-    if (existing >= 0) state.buttons[existing] = { name, reply };
+    if (existing >= 0) state.buttons[existing] = { ...state.buttons[existing], name, reply, url };
     else if (state.buttons.length >= 16) {
       await sendMessage(chatId, '自定义按钮最多 16 个，请先删除不需要的按钮。');
       return true;
-    } else state.buttons.push({ name, reply });
+    } else state.buttons.push({ name, reply, url });
     saveState();
     await sendMessage(chatId, '已保存按钮“' + name + '”。', { reply_markup: keyboard(msg.from.id) });
     return true;
@@ -196,6 +203,7 @@ async function handleAdminCommand(msg, command, text) {
 
   if (command === '/cancel') {
     delete state.pendingBroadcast[String(msg.from.id)];
+    delete state.pendingButtonEdit[String(msg.from.id)];
     state.supportMode[String(msg.from.id)] = false;
     saveState();
     await sendMessage(chatId, '已取消当前操作。', { reply_markup: keyboard(msg.from.id) });
@@ -301,29 +309,48 @@ async function handleMessage(msg) {
 
   if (isAdmin(msg.from.id) && command && await handleAdminCommand(msg, command, text)) return;
 
-  if (isAdmin(msg.from.id)) {
-    const pending = state.pendingBroadcast[uid];
-    if (pending && pending.stage === 'draft') {
-      if (!text || command.startsWith('/')) {
-        await sendMessage(msg.chat.id, '请发送纯文本公告，或输入 /cancel 取消。');
-        return;
-      }
-      pending.stage = 'confirm';
-      pending.text = text.slice(0, 4000);
+  if (isAdmin(msg.from.id) && state.pendingButtonEdit[uid]) {
+    const edit = state.pendingButtonEdit[uid];
+    const button = state.buttons[edit.index];
+    delete state.pendingButtonEdit[uid];
+    if (!button) {
       saveState();
-      await sendMessage(msg.chat.id, '请确认广播内容：\n\n' + pending.text.slice(0, 3500), {
-        reply_markup: {
-          inline_keyboard: [[
-            { text: '确认广播', callback_data: 'broadcast:confirm' },
-            { text: '取消广播', callback_data: 'broadcast:cancel' }
-          ]]
-        }
-      });
+      await sendMessage(msg.chat.id, '这个按钮已不存在，请重新打开设置。', { reply_markup: keyboard(msg.from.id) });
       return;
     }
+    if (!text || command.startsWith('/')) {
+      await sendMessage(msg.chat.id, '请输入有效内容，或发送 /cancel 取消。');
+      state.pendingButtonEdit[uid] = edit;
+      saveState();
+      return;
+    }
+    if (edit.action === 'name') {
+      if (['会员套餐', '最新通知', '联系客服', '⚙️ 设置', '/admin'].includes(text) ||
+          state.buttons.some((item, index) => index !== edit.index && item.name === text)) {
+        state.pendingButtonEdit[uid] = edit;
+        saveState();
+        await sendMessage(msg.chat.id, '名称已被占用或属于固定菜单，请重新输入，或发送 /cancel 取消。');
+        return;
+      }
+      button.name = text.slice(0, 40);
+    } else if (edit.action === 'url') {
+      if (text !== '-' && !/^https?:\/\//i.test(text)) {
+        state.pendingButtonEdit[uid] = edit;
+        saveState();
+        await sendMessage(msg.chat.id, '请输入以 https:// 或 http:// 开头的链接；发送 - 可清除链接，/cancel 可取消。');
+        return;
+      }
+      button.url = text === '-' ? '' : text.slice(0, 1000);
+    } else if (edit.action === 'reply') {
+      button.reply = text.slice(0, 3500);
+    }
+    saveState();
+    await sendMessage(msg.chat.id, '已更新按钮设置。', { reply_markup: keyboard(msg.from.id) });
+    return;
   }
 
-  if (text === '⚙️ 设置' && isAdmin(msg.from.id)) {
+  if (isAdmin(msg.from.id)) {
+    const pending = state.pendingBroadcast[uid];  if (text === '⚙️ 设置' && isAdmin(msg.from.id)) {
     await sendMessage(msg.chat.id, '⚙️ 管理员设置\n请选择要管理的项目：', {
       reply_markup: {
         inline_keyboard: [
@@ -384,7 +411,13 @@ async function handleMessage(msg) {
 
   const custom = state.buttons.find(item => item.name === text);
   if (custom) {
-    await sendMessage(msg.chat.id, custom.reply, { reply_markup: keyboard(msg.from.id) });
+    if (custom.url) {
+      await sendMessage(msg.chat.id, custom.reply || '请点击下方按钮打开链接：', {
+        reply_markup: { inline_keyboard: [[{ text: '🔗 打开 ' + custom.name, url: custom.url }]] }
+      });
+    } else {
+      await sendMessage(msg.chat.id, custom.reply, { reply_markup: keyboard(msg.from.id) });
+    }
     return;
   }
 
@@ -414,9 +447,7 @@ async function handleCallback(query) {
   }
 
   if (query.data === 'settings:addbutton') {
-    await sendMessage(chatId, '请按下面格式发送一条消息，即可新增或修改底部按钮：\n/addbutton 按钮名称|自动回复内容\n\n例如：\n/addbutton 联系方式|请联系管理员 @你的用户名', {
-      reply_markup: keyboard(query.from.id)
-    });
+    await sendMessage(chatId, '请发送以下格式新增或修改按钮：\n/addbutton 按钮名称|自动回复内容|链接\n\n例如：\n/addbutton 会员频道|点击下方进入频道|https://t.me/yourchannel\n\n没有链接时，最后一项可以省略。');
     return;
   }
 
@@ -431,16 +462,20 @@ async function handleCallback(query) {
     const rows = [];
     if (state.buttons.length) {
       state.buttons.forEach((button, index) => {
-        rows.push([{ text: '❌ 删除：' + button.name, callback_data: 'settings:del:' + index }]);
+        rows.push([{ text: '✏️ 名称：' + button.name, callback_data: 'settings:editname:' + index }]);
+        rows.push([{ text: '🔗 链接：' + (button.url ? '已设置' : '未设置'), callback_data: 'settings:editurl:' + index }]);
+        rows.push([{ text: '📝 回复内容：' + button.name, callback_data: 'settings:editreply:' + index }]);
+        rows.push([{ text: '🗑 删除：' + button.name, callback_data: 'settings:del:' + index }]);
       });
     } else {
       rows.push([{ text: '暂无自定义按钮', callback_data: 'settings:noop' }]);
     }
-    rows.push([{ text: '➕ 添加/修改按钮', callback_data: 'settings:addbutton' }]);
+    rows.push([{ text: '➕ 添加按钮', callback_data: 'settings:addbutton' }]);
     rows.push([{ text: '⬅️ 返回设置', callback_data: 'settings:menu' }]);
-    await sendMessage(chatId, '自定义底部按钮：\n' + (state.buttons.length
-      ? state.buttons.map((button, index) => (index + 1) + '. ' + button.name + ' → ' + button.reply).join('\n')
-      : '目前没有自定义按钮。'), {
+    const details = state.buttons.length
+      ? state.buttons.map((button, index) => (index + 1) + '. ' + button.name + '\n链接：' + (button.url || '未设置') + '\n回复：' + (button.reply || '无')).join('\n\n')
+      : '目前没有自定义按钮。';
+    await sendMessage(chatId, '自定义按钮管理：\n' + details + '\n\n点击对应操作可单独修改名称、链接或回复内容。', {
       reply_markup: { inline_keyboard: rows }
     });
     return;
@@ -461,6 +496,26 @@ async function handleCallback(query) {
   }
 
   if (query.data === 'settings:noop') return;
+
+  const editMatch = query.data.match(/^settings:edit(name|url|reply):(\d+)$/);
+  if (editMatch) {
+    const action = editMatch[1];
+    const index = Number(editMatch[2]);
+    const button = state.buttons[index];
+    if (!button) {
+      await sendMessage(chatId, '这个按钮已不存在，请重新打开设置菜单。');
+      return;
+    }
+    state.pendingButtonEdit[key] = { action, index };
+    saveState();
+    const prompts = {
+      name: '请输入按钮的新名称：',
+      url: '请输入新的完整链接（以 https:// 或 http:// 开头）；发送 - 可清除链接：',
+      reply: '请输入新的回复内容：'
+    };
+    await sendMessage(chatId, '正在修改「' + button.name + '」。\n' + prompts[action] + '\n发送 /cancel 可取消。');
+    return;
+  }
 
   if (query.data.startsWith('settings:del:')) {
     const index = Number(query.data.slice('settings:del:'.length));
