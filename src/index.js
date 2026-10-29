@@ -110,6 +110,7 @@ function keyboard(userId) {
   const rows = [];
   const custom = state.buttons.map(item => item.name).filter(name => !['⚙️ 设置', '/admin'].includes(name));
   for (let i = 0; i < custom.length; i += 2) rows.push(custom.slice(i, i + 2));
+  rows.push(['联系客服']);
   if (isAdmin(userId)) rows.push(['⚙️ 设置']);
   if (!rows.length) return { remove_keyboard: true };
   return { keyboard: rows, resize_keyboard: true, is_persistent: true };
@@ -430,6 +431,15 @@ async function handleMessage(msg) {
           [{ text: '管理帮助', callback_data: 'settings:help' }]
         ]
       }
+    });
+    return;
+  }
+
+  if (text === '联系客服') {
+    state.supportMode[uid] = true;
+    saveState();
+    await sendMessage(msg.chat.id, '请直接发送要咨询的内容或文件，我会转发给管理员。发送 /cancel 可退出客服咨询。', {
+      reply_markup: keyboard(msg.from.id)
     });
     return;
   }
