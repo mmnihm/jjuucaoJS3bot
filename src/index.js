@@ -435,7 +435,6 @@ async function handleMessage(msg) {
           [{ text: '设置新用户欢迎消息', callback_data: 'settings:welcome' }],
           [{ text: '添加/修改按钮', callback_data: 'settings:addbutton' }],
           [{ text: '📊 用户统计', callback_data: 'settings:stats' }],
-          [{ text: '📊 用户统计', callback_data: 'settings:stats' }],
           [{ text: '开始广播', callback_data: 'settings:broadcast' }],
           [{ text: '管理帮助', callback_data: 'settings:help' }]
         ]
@@ -585,6 +584,7 @@ async function handleCallback(query) {
         inline_keyboard: [
           [{ text: '管理自定义按钮', callback_data: 'settings:buttons' }],
           [{ text: '添加/修改按钮', callback_data: 'settings:addbutton' }],
+          [{ text: '📊 用户统计', callback_data: 'settings:stats' }],
           [{ text: '开始广播', callback_data: 'settings:broadcast' }],
           [{ text: '管理帮助', callback_data: 'settings:help' }]
         ]
