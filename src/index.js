@@ -19,10 +19,7 @@ let offset = 0;
 let state = {
   adminId: null,
   users: {},
-  buttons: [
-    { name: '会员套餐', reply: '请查看会员套餐公告。如需咨询，请点击“联系客服”。' },
-    { name: '最新通知', reply: '请查看会员频道或会员群内的最新通知。' }
-  ],
+  buttons: [],
   supportMode: {},
   supportMap: {},
   pendingBroadcast: {},
@@ -43,7 +40,7 @@ function loadState() {
     throw err;
   }
   state.users ||= {};
-  state.buttons ||= [];
+  state.buttons = (state.buttons || []).filter(item => !['会员套餐', '最新通知', '联系客服'].includes(item.name));
   state.supportMode ||= {};
   state.supportMap ||= {};
   state.pendingBroadcast ||= {};
@@ -106,12 +103,11 @@ function isAdmin(userId) {
 }
 
 function keyboard(userId) {
-  const fixed = ['会员套餐', '最新通知', '联系客服'];
-  const rows = [[fixed[0], fixed[1]], [fixed[2]]];
-  const custom = state.buttons.map(item => item.name).filter(name => !fixed.includes(name));
+  const rows = [];
+  const custom = state.buttons.map(item => item.name).filter(name => !['⚙️ 设置', '/admin'].includes(name));
   for (let i = 0; i < custom.length; i += 2) rows.push(custom.slice(i, i + 2));
   if (isAdmin(userId)) rows.push(['⚙️ 设置']);
-  return { keyboard: rows, resize_keyboard: true, is_persistent: true };
+  return { keyboard: rows.length ? rows : [['⚙️ 设置'].filter(() => isAdmin(userId))], resize_keyboard: true, is_persistent: true };
 }
 
 async function home(chatId, userId, text) {
@@ -168,7 +164,7 @@ async function handleAdminCommand(msg, command, text) {
       await sendMessage(chatId, '链接必须以 https:// 或 http:// 开头。');
       return true;
     }
-    if (['会员套餐', '最新通知', '联系客服', '⚙️ 设置', '/admin'].includes(name)) {
+    if (['⚙️ 设置', '/admin'].includes(name)) {
       await sendMessage(chatId, '这个名称是固定菜单，请换一个按钮名称。');
       return true;
     }
@@ -328,7 +324,7 @@ async function handleMessage(msg) {
       return;
     }
     if (edit.action === 'name') {
-      if (['会员套餐', '最新通知', '联系客服', '⚙️ 设置', '/admin'].includes(text) ||
+      if (['⚙️ 设置', '/admin'].includes(text) ||
           state.buttons.some((item, index) => index !== edit.index && item.name === text)) {
         state.pendingButtonEdit[uid] = edit;
         saveState();
@@ -413,15 +409,6 @@ async function handleMessage(msg) {
     return;
   }
 
-  if (text === '联系客服') {
-    state.supportMode[uid] = true;
-    saveState();
-    await sendMessage(msg.chat.id, '请直接发送要咨询的内容或文件，我会转发给管理员。发送 /cancel 可退出。', {
-      reply_markup: keyboard(msg.from.id)
-    });
-    return;
-  }
-
   if (state.supportMode[uid] && command === '/cancel') {
     state.supportMode[uid] = false;
     saveState();
@@ -441,20 +428,6 @@ async function handleMessage(msg) {
       console.error('客服转发失败：' + err.message);
       await sendMessage(msg.chat.id, '转发失败，请稍后重试。');
     }
-    return;
-  }
-
-  if (text === '会员套餐') {
-    await sendMessage(msg.chat.id, '请查看会员套餐公告。如需咨询价格和权益，请点击“联系客服”。', {
-      reply_markup: keyboard(msg.from.id)
-    });
-    return;
-  }
-
-  if (text === '最新通知') {
-    await sendMessage(msg.chat.id, '请查看会员频道或会员群内的最新通知。', {
-      reply_markup: keyboard(msg.from.id)
-    });
     return;
   }
 
@@ -510,7 +483,7 @@ async function handleCallback(query) {
   if (query.data === 'settings:buttons') {
     const rows = [];
     const editable = state.buttons.map((button, index) => ({ button, index }))
-      .filter(({ button }) => !['会员套餐', '最新通知', '联系客服', '⚙️ 设置', '/admin'].includes(button.name));
+      .filter(({ button }) => !['⚙️ 设置', '/admin'].includes(button.name));
     if (editable.length) {
       editable.forEach(({ button, index }) => {
         rows.push([{ text: '✏️ 名称：' + button.name, callback_data: 'settings:editname:' + index }]);
@@ -553,7 +526,7 @@ async function handleCallback(query) {
     const action = editMatch[1];
     const index = Number(editMatch[2]);
     const button = state.buttons[index];
-    if (!button || ['会员套餐', '最新通知', '联系客服', '⚙️ 设置', '/admin'].includes(button.name)) {
+    if (!button || ['⚙️ 设置', '/admin'].includes(button.name)) {
       await sendMessage(chatId, '这个按钮不可编辑或已不存在，请重新打开设置菜单。');
       return;
     }
@@ -575,7 +548,7 @@ async function handleCallback(query) {
       return;
     }
     const name = state.buttons[index].name;
-    if (['会员套餐', '最新通知', '联系客服', '⚙️ 设置', '/admin'].includes(name)) {
+    if (['⚙️ 设置', '/admin'].includes(name)) {
       await sendMessage(chatId, '固定菜单不能从自定义按钮管理中删除。');
       return;
     }
