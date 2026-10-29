@@ -4,13 +4,18 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const TOKEN = process.env.BOT_TOKEN;
+const ADMIN_ID = String(process.env.ADMIN_ID || '').trim();
 const BOT_NAME = process.env.BOT_NAME || '会员通知助手';
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const POLL_TIMEOUT = Math.max(5, Math.min(50, Number(process.env.POLL_TIMEOUT || 25)));
 
 if (!TOKEN) {
-  console.error('启动失败：缺少唯一必需环境变量 BOT_TOKEN');
+  console.error('启动失败：缺少必需环境变量 BOT_TOKEN');
+  process.exit(1);
+}
+if (ADMIN_ID && !/^\\d+$/.test(ADMIN_ID)) {
+  console.error('启动失败：ADMIN_ID 必须填写 Telegram 数字用户 ID');
   process.exit(1);
 }
 
@@ -42,6 +47,7 @@ function loadState() {
     console.error('读取数据失败：' + err.message);
     throw err;
   }
+  if (ADMIN_ID) state.adminId = Number(ADMIN_ID);
   state.users ||= {};
   state.buttons = (state.buttons || []).filter(item => !['会员套餐', '最新通知', '联系客服'].includes(item.name));
   state.supportMode ||= {};
@@ -133,7 +139,7 @@ async function adminHelp(chatId) {
     '/cancel — 取消当前操作',
     '',
     '客服：直接回复转发给你的用户消息，即可回复用户。',
-    '首次使用提示：第一个发送 /start 的用户会自动成为管理员。'
+    ADMIN_ID ? '管理员由环境变量 ADMIN_ID 指定。' : '首次使用提示：第一个发送 /start 的用户会自动成为管理员。'
   ].join('\n'), { reply_markup: keyboard(state.adminId) });
 }
 
@@ -279,9 +285,9 @@ async function handleMessage(msg) {
   const text = typeof msg.text === 'string' ? msg.text.trim() : '';
   const command = commandOf(text);
 
-  // First user to send /start claims the admin role; save it to disk.
+  // ADMIN_ID takes priority; otherwise the first /start user becomes admin.
   let becameAdmin = false;
-  if (command === '/start' && state.adminId === null) {
+  if (!ADMIN_ID && command === '/start' && state.adminId === null) {
     state.adminId = msg.from.id;
     becameAdmin = true;
     console.log('首位 /start 用户成为管理员：' + state.adminId);
@@ -307,7 +313,7 @@ async function handleMessage(msg) {
     const defaultGreeting = '欢迎使用' + BOT_NAME + '！\n\n请使用下方菜单查看信息或联系客服。';
     const greeting = (becameAdmin
       ? '你是第一个启动机器人的用户，已自动成为管理员。\n发送 /admin 管理机器人。\n\n'
-      : '') + (state.welcomeMessage || defaultGreeting);
+      : (ADMIN_ID && isAdmin(msg.from.id) ? '你已通过 ADMIN_ID 被指定为管理员。\n发送 /admin 管理机器人。\n\n' : '')) + (state.welcomeMessage || defaultGreeting);
     await home(msg.chat.id, msg.from.id, greeting);
     return;
   }
@@ -711,5 +717,5 @@ async function poll() {
 }
 
 loadState();
-console.log(BOT_NAME + ' 已启动。只需设置 BOT_TOKEN；首位 /start 用户自动成为管理员。');
+console.log(BOT_NAME + ' 已启动。' + (ADMIN_ID ? '管理员由 ADMIN_ID 指定：' + ADMIN_ID : '未设置 ADMIN_ID，首位 /start 用户自动成为管理员。'));
 poll();
