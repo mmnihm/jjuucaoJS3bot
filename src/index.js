@@ -213,20 +213,23 @@ async function handleAdminCommand(msg, command, text) {
   return false;
 }
 
-async function runBroadcast(adminChatId, text) {
+async function runBroadcast(adminChatId, text, buttons = []) {
   let success = 0;
   let failed = 0;
   const ids = Object.keys(state.users);
   for (const id of ids) {
+    const extra = buttons.length
+      ? { reply_markup: { inline_keyboard: buttons.map(button => [{ text: button.name, url: button.url }]) } }
+      : { reply_markup: keyboard(Number(id)) };
     try {
-      await sendMessage(id, text, { reply_markup: keyboard(Number(id)) });
+      await sendMessage(id, text, extra);
       success++;
     } catch (err) {
       failed++;
       if (err.code === 429 && Number(err.parameters?.retry_after) > 0) {
         await new Promise(resolve => setTimeout(resolve, (Number(err.parameters.retry_after) + 1) * 1000));
         try {
-          await sendMessage(id, text, { reply_markup: keyboard(Number(id)) });
+          await sendMessage(id, text, extra);
           failed--;
           success++;
         } catch {}
@@ -350,7 +353,53 @@ async function handleMessage(msg) {
   }
 
   if (isAdmin(msg.from.id)) {
-    const pending = state.pendingBroadcast[uid];  if (text === '⚙️ 设置' && isAdmin(msg.from.id)) {
+    const pending = state.pendingBroadcast[uid];
+    if (pending?.stage === 'draft') {
+      if (!text || command.startsWith('/')) {
+        await sendMessage(msg.chat.id, '请发送纯文本公告内容，或发送 /cancel 取消。');
+        return;
+      }
+      pending.text = text;
+      pending.buttons = [];
+      pending.stage = 'buttons';
+      saveState();
+      await sendMessage(msg.chat.id, '公告内容已收到。\n\n如需在公告下方添加内联按钮，请发送：按钮名称|完整链接\n例如：加入会员群|https://t.me/yourchannel\n可以连续添加多个按钮，最多 8 个。\n发送 /done 完成按钮设置，/skip 不添加按钮，/cancel 取消广播。');
+      return;
+    }
+    if (pending?.stage === 'buttons') {
+      if (command === '/skip' || command === '/done') {
+        pending.stage = 'confirm';
+        saveState();
+        const rows = (pending.buttons || []).map(button => [{ text: button.name, url: button.url }]);
+        rows.push([
+          { text: '✅ 确认广播', callback_data: 'broadcast:confirm' },
+          { text: '❌ 取消广播', callback_data: 'broadcast:cancel' }
+        ]);
+        await sendMessage(msg.chat.id, '📢 广播预览\n\n' + pending.text + '\n\n' +
+          ((pending.buttons || []).length ? '已添加 ' + pending.buttons.length + ' 个内联按钮。' : '未添加内联按钮。') +
+          '\n请确认后发送给所有用户。', { reply_markup: { inline_keyboard: rows } });
+        return;
+      }
+      const parts = text.split('|');
+      const name = (parts.shift() || '').trim().slice(0, 64);
+      const url = parts.join('|').trim();
+      if (!name || !/^https?:\/\//i.test(url)) {
+        await sendMessage(msg.chat.id, '格式不正确。请发送：按钮名称|https://完整链接\n例如：加入会员群|https://t.me/yourchannel\n发送 /done 完成，/skip 不添加按钮，/cancel 取消。');
+        return;
+      }
+      if ((pending.buttons || []).length >= 8) {
+        await sendMessage(msg.chat.id, '最多添加 8 个内联按钮。发送 /done 完成设置。');
+        return;
+      }
+      pending.buttons ||= [];
+      pending.buttons.push({ name, url });
+      saveState();
+      await sendMessage(msg.chat.id, '已添加内联按钮「' + name + '」。\n继续发送“按钮名称|链接”添加更多，或发送 /done 完成，/cancel 取消。');
+      return;
+    }
+  }
+
+  if (text === '⚙️ 设置' && isAdmin(msg.from.id)) {
     await sendMessage(msg.chat.id, '⚙️ 管理员设置\n请选择要管理的项目：', {
       reply_markup: {
         inline_keyboard: [
@@ -556,11 +605,12 @@ async function handleCallback(query) {
       return;
     }
     const text = pending.text;
+    const buttons = Array.isArray(pending.buttons) ? pending.buttons.slice() : [];
     delete state.pendingBroadcast[key];
     saveState();
-    await sendMessage(chatId, '已开始广播，完成后会发送统计结果。', { reply_markup: keyboard(query.from.id) });
+    await sendMessage(chatId, '已开始广播' + (buttons.length ? '（含 ' + buttons.length + ' 个内联按钮）' : '') + '，完成后会发送统计结果。', { reply_markup: keyboard(query.from.id) });
     // Do not block update polling while broadcasting.
-    runBroadcast(chatId, text).catch(err => console.error('广播异常：' + err.message));
+    runBroadcast(chatId, text, buttons).catch(err => console.error('广播异常：' + err.message));
   }
 }
 
