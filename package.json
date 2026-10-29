@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "description": "Lightweight Telegram member notification and support bot",
-  "main": "src/index.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "check": "node --check src/index.js"
+    "start": "node index.js",
+    "check": "node --check index.js && node --check src/index.js"
   },
   "engines": {
     "node": ">=18"
