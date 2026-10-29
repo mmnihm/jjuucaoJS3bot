@@ -23,7 +23,9 @@ let state = {
   supportMode: {},
   supportMap: {},
   pendingBroadcast: {},
-  pendingButtonEdit: {}
+  pendingButtonEdit: {},
+  welcomeMessage: '',
+  pendingWelcomeEdit: {}
 };
 
 function loadState() {
@@ -45,6 +47,8 @@ function loadState() {
   state.supportMap ||= {};
   state.pendingBroadcast ||= {};
   state.pendingButtonEdit ||= {};
+  state.pendingWelcomeEdit ||= {};
+  state.welcomeMessage ||= '';
 }
 
 function saveState() {
@@ -293,9 +297,10 @@ async function handleMessage(msg) {
   if (command === '/start') {
     state.supportMode[uid] = false;
     saveState();
+    const defaultGreeting = '欢迎使用' + BOT_NAME + '！\n\n请使用下方菜单查看信息或联系客服。';
     const greeting = (becameAdmin
       ? '你是第一个启动机器人的用户，已自动成为管理员。\n发送 /admin 管理机器人。\n\n'
-      : '') + '欢迎使用' + BOT_NAME + '！\n\n请使用下方菜单查看信息或联系客服。';
+      : '') + (state.welcomeMessage || defaultGreeting);
     await home(msg.chat.id, msg.from.id, greeting);
     return;
   }
@@ -308,6 +313,24 @@ async function handleMessage(msg) {
   }
 
   if (isAdmin(msg.from.id) && command && await handleAdminCommand(msg, command, text)) return;
+
+  if (isAdmin(msg.from.id) && state.pendingWelcomeEdit[uid]) {
+    if (command === '/cancel') {
+      delete state.pendingWelcomeEdit[uid];
+      saveState();
+      await sendMessage(msg.chat.id, '已取消欢迎消息修改。', { reply_markup: keyboard(msg.from.id) });
+      return;
+    }
+    if (!text) {
+      await sendMessage(msg.chat.id, '请发送文字欢迎消息，或发送 /cancel 取消。');
+      return;
+    }
+    state.welcomeMessage = text === '/reset' ? '' : text.slice(0, 3500);
+    delete state.pendingWelcomeEdit[uid];
+    saveState();
+    await sendMessage(msg.chat.id, state.welcomeMessage ? '新用户欢迎消息已保存。发送 /start 可预览。' : '已恢复默认欢迎消息。', { reply_markup: keyboard(msg.from.id) });
+    return;
+  }
 
   if (isAdmin(msg.from.id) && state.pendingButtonEdit[uid]) {
     const edit = state.pendingButtonEdit[uid];
@@ -401,6 +424,7 @@ async function handleMessage(msg) {
       reply_markup: {
         inline_keyboard: [
           [{ text: '管理自定义按钮', callback_data: 'settings:buttons' }],
+          [{ text: '设置新用户欢迎消息', callback_data: 'settings:welcome' }],
           [{ text: '添加/修改按钮', callback_data: 'settings:addbutton' }],
           [{ text: '开始广播', callback_data: 'settings:broadcast' }],
           [{ text: '管理帮助', callback_data: 'settings:help' }]
@@ -466,6 +490,13 @@ async function handleCallback(query) {
 
   if (query.data === 'settings:help') {
     await adminHelp(chatId);
+    return;
+  }
+
+  if (query.data === 'settings:welcome') {
+    state.pendingWelcomeEdit[key] = true;
+    saveState();
+    await sendMessage(chatId, '请发送新用户启动机器人时显示的欢迎消息。\n可以直接换行排版。\n发送 /reset 恢复默认欢迎消息，发送 /cancel 取消修改。');
     return;
   }
 
