@@ -108,7 +108,7 @@ function keyboard(userId) {
   const rows = [[fixed[0], fixed[1]], [fixed[2]]];
   const custom = state.buttons.map(item => item.name).filter(name => !fixed.includes(name));
   for (let i = 0; i < custom.length; i += 2) rows.push(custom.slice(i, i + 2));
-  if (isAdmin(userId)) rows.push(['/admin']);
+  if (isAdmin(userId)) rows.push(['⚙️ 设置']);
   return { keyboard: rows, resize_keyboard: true, is_persistent: true };
 }
 
@@ -119,6 +119,7 @@ async function home(chatId, userId, text) {
 async function adminHelp(chatId) {
   await sendMessage(chatId, [
     '管理员功能：',
+    '也可以点击底部「⚙️ 设置」打开管理菜单。',
     '/buttons — 查看自定义按钮',
     '/addbutton 按钮名称|自动回复内容 — 新增或修改按钮',
     '/delbutton 按钮名称 — 删除按钮',
@@ -322,6 +323,20 @@ async function handleMessage(msg) {
     }
   }
 
+  if (text === '⚙️ 设置' && isAdmin(msg.from.id)) {
+    await sendMessage(msg.chat.id, '⚙️ 管理员设置\\n请选择要管理的项目：', {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '管理自定义按钮', callback_data: 'settings:buttons' }],
+          [{ text: '添加/修改按钮', callback_data: 'settings:addbutton' }],
+          [{ text: '开始广播', callback_data: 'settings:broadcast' }],
+          [{ text: '管理帮助', callback_data: 'settings:help' }]
+        ]
+      }
+    });
+    return;
+  }
+
   if (text === '联系客服') {
     state.supportMode[uid] = true;
     saveState();
@@ -392,6 +407,80 @@ async function handleCallback(query) {
   if (!chatId) return;
   const key = String(query.from.id);
   const pending = state.pendingBroadcast[key];
+
+  if (query.data === 'settings:help') {
+    await adminHelp(chatId);
+    return;
+  }
+
+  if (query.data === 'settings:addbutton') {
+    await sendMessage(chatId, '请按下面格式发送一条消息，即可新增或修改底部按钮：\\n/addbutton 按钮名称|自动回复内容\\n\\n例如：\\n/addbutton 联系方式|请联系管理员 @你的用户名', {
+      reply_markup: keyboard(query.from.id)
+    });
+    return;
+  }
+
+  if (query.data === 'settings:broadcast') {
+    state.pendingBroadcast[key] = { stage: 'draft', text: '' };
+    saveState();
+    await sendMessage(chatId, '请发送要广播的纯文本公告。发送后还会让你二次确认。输入 /cancel 可取消。');
+    return;
+  }
+
+  if (query.data === 'settings:buttons') {
+    const rows = [];
+    if (state.buttons.length) {
+      state.buttons.forEach((button, index) => {
+        rows.push([{ text: '❌ 删除：' + button.name, callback_data: 'settings:del:' + index }]);
+      });
+    } else {
+      rows.push([{ text: '暂无自定义按钮', callback_data: 'settings:noop' }]);
+    }
+    rows.push([{ text: '➕ 添加/修改按钮', callback_data: 'settings:addbutton' }]);
+    rows.push([{ text: '⬅️ 返回设置', callback_data: 'settings:menu' }]);
+    await sendMessage(chatId, '自定义底部按钮：\\n' + (state.buttons.length
+      ? state.buttons.map((button, index) => (index + 1) + '. ' + button.name + ' → ' + button.reply).join('\\n')
+      : '目前没有自定义按钮。'), {
+      reply_markup: { inline_keyboard: rows }
+    });
+    return;
+  }
+
+  if (query.data === 'settings:menu') {
+    await sendMessage(chatId, '⚙️ 管理员设置\\n请选择要管理的项目：', {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '管理自定义按钮', callback_data: 'settings:buttons' }],
+          [{ text: '添加/修改按钮', callback_data: 'settings:addbutton' }],
+          [{ text: '开始广播', callback_data: 'settings:broadcast' }],
+          [{ text: '管理帮助', callback_data: 'settings:help' }]
+        ]
+      }
+    });
+    return;
+  }
+
+  if (query.data === 'settings:noop') return;
+
+  if (query.data.startsWith('settings:del:')) {
+    const index = Number(query.data.slice('settings:del:'.length));
+    if (!Number.isInteger(index) || index < 0 || index >= state.buttons.length) {
+      await sendMessage(chatId, '这个按钮可能已被删除，请重新打开设置菜单。');
+      return;
+    }
+    const name = state.buttons[index].name;
+    state.buttons.splice(index, 1);
+    saveState();
+    await sendMessage(chatId, '已删除按钮「' + name + '」。', {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '继续管理按钮', callback_data: 'settings:buttons' }],
+          [{ text: '返回设置', callback_data: 'settings:menu' }]
+        ]
+      }
+    });
+    return;
+  }
 
   if (query.data === 'broadcast:cancel') {
     delete state.pendingBroadcast[key];
