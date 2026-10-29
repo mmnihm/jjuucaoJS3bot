@@ -526,6 +526,10 @@ async function handleCallback(query) {
       return;
     }
     const name = state.buttons[index].name;
+    if (['会员套餐', '最新通知', '联系客服', '⚙️ 设置', '/admin'].includes(name)) {
+      await sendMessage(chatId, '固定菜单不能从自定义按钮管理中删除。');
+      return;
+    }
     state.buttons.splice(index, 1);
     saveState();
     await sendMessage(chatId, '已删除按钮「' + name + '」。', {
