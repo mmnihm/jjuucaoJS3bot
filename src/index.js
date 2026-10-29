@@ -294,7 +294,7 @@ async function handleMessage(msg) {
     first_name: msg.from.first_name || '',
     username: msg.from.username || '',
     first_seen: previousUser?.first_seen || now,
-    start_counted: previousUser?.start_counted || (command === '/start' ? now : null),
+    start_counted: previousUser ? (previousUser.start_counted || null) : (command === '/start' ? now : null),
     last_seen: now
   };
   saveState();
@@ -601,10 +601,9 @@ async function handleCallback(query) {
     const started = users.filter(user => Number(user.start_counted) > 0);
     const today = started.filter(user => Number(user.start_counted) >= todayStart).length;
     const week = started.filter(user => Number(user.start_counted) >= weekStart).length;
-    const tracked = users.filter(user => Number(user.first_seen) > 0).length;
     const unknownHistory = users.length - started.length;
     const message = '📊 用户统计\\n\\n' +
-      '启动过机器人的用户：' + started.length + ' 人\\n' +
+      '本次更新后记录的启动用户：' + started.length + ' 人\\n' +
       '已记录用户总数：' + users.length + ' 人\\n' +
       '今日首次启动：' + today + ' 人\\n' +
       '最近 7 天首次启动：' + week + ' 人' +
