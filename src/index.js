@@ -25,7 +25,8 @@ let state = {
   pendingBroadcast: {},
   pendingButtonEdit: {},
   welcomeMessage: '',
-  pendingWelcomeEdit: {}
+  pendingWelcomeEdit: {},
+  buttonColumns: 2
 };
 
 function loadState() {
@@ -49,6 +50,7 @@ function loadState() {
   state.pendingButtonEdit ||= {};
   state.pendingWelcomeEdit ||= {};
   state.welcomeMessage ||= '';
+  state.buttonColumns = Math.max(1, Math.min(4, Number(state.buttonColumns) || 2));
 }
 
 function saveState() {
@@ -109,10 +111,10 @@ function isAdmin(userId) {
 function keyboard(userId) {
   const rows = [];
   const custom = state.buttons.map(item => item.name).filter(name => !['⚙️ 设置', '/admin'].includes(name));
-  for (let i = 0; i < custom.length; i += 2) rows.push(custom.slice(i, i + 2));
-  rows.push(['联系客服']);
+  custom.push('联系客服');
+  const columns = Math.max(1, Math.min(4, Number(state.buttonColumns) || 2));
+  for (let i = 0; i < custom.length; i += columns) rows.push(custom.slice(i, i + columns));
   if (isAdmin(userId)) rows.push(['⚙️ 设置']);
-  if (!rows.length) return { remove_keyboard: true };
   return { keyboard: rows, resize_keyboard: true, is_persistent: true };
 }
 
@@ -425,6 +427,7 @@ async function handleMessage(msg) {
       reply_markup: {
         inline_keyboard: [
           [{ text: '管理自定义按钮', callback_data: 'settings:buttons' }],
+          [{ text: '设置底部每行按钮数', callback_data: 'settings:layout' }],
           [{ text: '设置新用户欢迎消息', callback_data: 'settings:welcome' }],
           [{ text: '添加/修改按钮', callback_data: 'settings:addbutton' }],
           [{ text: '开始广播', callback_data: 'settings:broadcast' }],
@@ -500,6 +503,29 @@ async function handleCallback(query) {
 
   if (query.data === 'settings:help') {
     await adminHelp(chatId);
+    return;
+  }
+
+  if (query.data === 'settings:layout') {
+    await sendMessage(chatId, '请选择底部每行显示几个按钮（当前：' + state.buttonColumns + ' 个）：', {
+      reply_markup: { inline_keyboard: [
+        [{ text: '1 个/行' + (state.buttonColumns === 1 ? ' ✓' : ''), callback_data: 'settings:layout:1' },
+         { text: '2 个/行' + (state.buttonColumns === 2 ? ' ✓' : ''), callback_data: 'settings:layout:2' }],
+        [{ text: '3 个/行' + (state.buttonColumns === 3 ? ' ✓' : ''), callback_data: 'settings:layout:3' },
+         { text: '4 个/行' + (state.buttonColumns === 4 ? ' ✓' : ''), callback_data: 'settings:layout:4' }],
+        [{ text: '⬅️ 返回设置', callback_data: 'settings:menu' }]
+      ] }
+    });
+    return;
+  }
+
+  const layoutMatch = query.data.match(/^settings:layout:([1-4])$/);
+  if (layoutMatch) {
+    state.buttonColumns = Number(layoutMatch[1]);
+    saveState();
+    await sendMessage(chatId, '已设置为每行 ' + state.buttonColumns + ' 个按钮。发送 /start 刷新底部菜单。', {
+      reply_markup: { inline_keyboard: [[{ text: '重新选择', callback_data: 'settings:layout' }], [{ text: '返回设置', callback_data: 'settings:menu' }]] }
+    });
     return;
   }
 
