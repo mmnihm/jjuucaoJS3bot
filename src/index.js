@@ -14,7 +14,7 @@ if (!TOKEN) {
   console.error('启动失败：缺少必需环境变量 BOT_TOKEN');
   process.exit(1);
 }
-if (ADMIN_ID && !/^\\d+$/.test(ADMIN_ID)) {
+if (ADMIN_ID && !/^\d+$/.test(ADMIN_ID)) {
   console.error('启动失败：ADMIN_ID 必须填写 Telegram 数字用户 ID');
   process.exit(1);
 }
