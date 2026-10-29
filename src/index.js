@@ -324,7 +324,7 @@ async function handleMessage(msg) {
   }
 
   if (text === '⚙️ 设置' && isAdmin(msg.from.id)) {
-    await sendMessage(msg.chat.id, '⚙️ 管理员设置\\n请选择要管理的项目：', {
+    await sendMessage(msg.chat.id, '⚙️ 管理员设置\n请选择要管理的项目：', {
       reply_markup: {
         inline_keyboard: [
           [{ text: '管理自定义按钮', callback_data: 'settings:buttons' }],
@@ -414,7 +414,7 @@ async function handleCallback(query) {
   }
 
   if (query.data === 'settings:addbutton') {
-    await sendMessage(chatId, '请按下面格式发送一条消息，即可新增或修改底部按钮：\\n/addbutton 按钮名称|自动回复内容\\n\\n例如：\\n/addbutton 联系方式|请联系管理员 @你的用户名', {
+    await sendMessage(chatId, '请按下面格式发送一条消息，即可新增或修改底部按钮：\n/addbutton 按钮名称|自动回复内容\n\n例如：\n/addbutton 联系方式|请联系管理员 @你的用户名', {
       reply_markup: keyboard(query.from.id)
     });
     return;
@@ -438,8 +438,8 @@ async function handleCallback(query) {
     }
     rows.push([{ text: '➕ 添加/修改按钮', callback_data: 'settings:addbutton' }]);
     rows.push([{ text: '⬅️ 返回设置', callback_data: 'settings:menu' }]);
-    await sendMessage(chatId, '自定义底部按钮：\\n' + (state.buttons.length
-      ? state.buttons.map((button, index) => (index + 1) + '. ' + button.name + ' → ' + button.reply).join('\\n')
+    await sendMessage(chatId, '自定义底部按钮：\n' + (state.buttons.length
+      ? state.buttons.map((button, index) => (index + 1) + '. ' + button.name + ' → ' + button.reply).join('\n')
       : '目前没有自定义按钮。'), {
       reply_markup: { inline_keyboard: rows }
     });
@@ -447,7 +447,7 @@ async function handleCallback(query) {
   }
 
   if (query.data === 'settings:menu') {
-    await sendMessage(chatId, '⚙️ 管理员设置\\n请选择要管理的项目：', {
+    await sendMessage(chatId, '⚙️ 管理员设置\n请选择要管理的项目：', {
       reply_markup: {
         inline_keyboard: [
           [{ text: '管理自定义按钮', callback_data: 'settings:buttons' }],
