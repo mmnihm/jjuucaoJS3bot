@@ -460,8 +460,10 @@ async function handleCallback(query) {
 
   if (query.data === 'settings:buttons') {
     const rows = [];
-    if (state.buttons.length) {
-      state.buttons.forEach((button, index) => {
+    const editable = state.buttons.map((button, index) => ({ button, index }))
+      .filter(({ button }) => !['会员套餐', '最新通知', '联系客服', '⚙️ 设置', '/admin'].includes(button.name));
+    if (editable.length) {
+      editable.forEach(({ button, index }) => {
         rows.push([{ text: '✏️ 名称：' + button.name, callback_data: 'settings:editname:' + index }]);
         rows.push([{ text: '🔗 链接：' + (button.url ? '已设置' : '未设置'), callback_data: 'settings:editurl:' + index }]);
         rows.push([{ text: '📝 回复内容：' + button.name, callback_data: 'settings:editreply:' + index }]);
@@ -472,8 +474,8 @@ async function handleCallback(query) {
     }
     rows.push([{ text: '➕ 添加按钮', callback_data: 'settings:addbutton' }]);
     rows.push([{ text: '⬅️ 返回设置', callback_data: 'settings:menu' }]);
-    const details = state.buttons.length
-      ? state.buttons.map((button, index) => (index + 1) + '. ' + button.name + '\n链接：' + (button.url || '未设置') + '\n回复：' + (button.reply || '无')).join('\n\n')
+    const details = editable.length
+      ? editable.map(({ button }, index) => (index + 1) + '. ' + button.name + '\n链接：' + (button.url || '未设置') + '\n回复：' + (button.reply || '无')).join('\n\n')
       : '目前没有自定义按钮。';
     await sendMessage(chatId, '自定义按钮管理：\n' + details + '\n\n点击对应操作可单独修改名称、链接或回复内容。', {
       reply_markup: { inline_keyboard: rows }
@@ -502,8 +504,8 @@ async function handleCallback(query) {
     const action = editMatch[1];
     const index = Number(editMatch[2]);
     const button = state.buttons[index];
-    if (!button) {
-      await sendMessage(chatId, '这个按钮已不存在，请重新打开设置菜单。');
+    if (!button || ['会员套餐', '最新通知', '联系客服', '⚙️ 设置', '/admin'].includes(button.name)) {
+      await sendMessage(chatId, '这个按钮不可编辑或已不存在，请重新打开设置菜单。');
       return;
     }
     state.pendingButtonEdit[key] = { action, index };
